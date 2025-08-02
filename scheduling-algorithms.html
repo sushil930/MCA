@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive CPU Scheduling Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Slate & Sky -->
+    <!-- Application Structure Plan: The SPA is structured as an interactive educational tool. A persistent sidebar allows users to select a scheduling algorithm. The main content area is divided into three key sections: 1) 'Algorithm Principles' which provides a concise explanation of the selected algorithm's theory and characteristics. 2) 'Interactive Simulator' which is the core of the app. It allows users to pick from pre-defined problem sets for the chosen algorithm. Upon selection, it dynamically visualizes the scheduling process via a Gantt chart, shows a step-by-step execution trace (Ready Queue), and calculates performance metrics. 3) 'Analysis & Comparison' offers a summary of the algorithm's pros, cons, and ideal use cases, along with a comparative table. This structure was chosen to facilitate a cycle of learning: understand the theory, see it in action, and then analyze its place in the broader context, which is more effective for educational content than a linear report. -->
+    <!-- Visualization & Content Choices: 
+        - Report Info: Core scheduling algorithm principles (FCFS, SJF, Priority, RR, etc.). Goal: Inform. Viz/Method: Structured HTML text blocks with highlighted keywords. Interaction: None. Justification: Clear, direct presentation of foundational knowledge. Library: N/A.
+        - Report Info: Solved problems with process data (AT, BT, Priority). Goal: Demonstrate & Compare. Viz/Method: An interactive simulator section. Users select a problem from a dropdown. The app displays the input process table, a dynamically generated Gantt Chart (using Chart.js), a step-by-step execution trace table, and a final performance metrics table (AWT, TAT). Interaction: Dropdown selection triggers JS functions to run the specific algorithm simulation, update all tables, and redraw the Gantt chart. Justification: This transforms static examples into a dynamic, hands-on learning experience, allowing users to directly see the cause-and-effect of each algorithm's logic. It's far more engaging than reading through static solutions. Library: Chart.js for the Gantt chart.
+        - Report Info: Algorithm analysis (Convoy Effect, Starvation, etc.). Goal: Analyze. Viz/Method: Curated text in an "Analysis" section, often paired with the simulator's output to provide context. Interaction: Content updates based on the selected algorithm. Justification: Connects the visual simulation results with the underlying theoretical concepts. Library: N/A.
+        - Report Info: Comparative analysis table. Goal: Synthesize & Compare. Viz/Method: A static but clear HTML table summarizing all algorithms. Interaction: None. Justification: Provides a high-level overview and a quick reference for comparing algorithms side-by-side. Library: N/A.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* slate-50 */
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 900px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 180px; /* Adjusted for better mobile view */
+            max-height: 220px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 150px;
+                max-height: 200px;
+            }
+        }
+        .sidebar-link {
+            transition: all 0.2s ease-in-out;
+        }
+        .sidebar-link.active {
+            background-color: #0284c7; /* sky-600 */
+            color: white;
+            font-weight: 600;
+        }
+        .sidebar-link:not(.active):hover {
+            background-color: #f1f5f9; /* slate-100 */
+            color: #0c4a6e; /* sky-900 */
+        }
+        .problem-select {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%236b7280%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E');
+            background-repeat: no-repeat;
+            background-position: right 0.7rem center;
+            background-size: 0.65rem auto;
+        }
+        .table-responsive {
+            display: block;
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+    </style>
+</head>
+<body class="text-slate-800">
+
+    <div class="relative min-h-screen md:flex">
+        <!-- Mobile Header -->
+        <div class="md:hidden flex justify-between items-center bg-white p-2 border-b sticky top-0 z-30">
+            <h1 class="text-lg font-bold text-sky-800 px-2">CPU Scheduling</h1>
+            <button id="mobile-menu-button" class="p-2 rounded-md text-slate-500 hover:text-slate-800 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-sky-500">
+                <svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+            </button>
+        </div>
+
+        <!-- Sidebar -->
+        <aside id="sidebar" class="w-64 bg-white border-r border-slate-200 flex-shrink-0 fixed inset-y-0 left-0 transform -translate-x-full md:relative md:translate-x-0 transition-transform duration-200 ease-in-out z-40">
+            <div class="p-4 border-b border-slate-200 hidden md:block">
+                <h1 class="text-xl font-bold text-sky-800">CPU Scheduling</h1>
+                <p class="text-sm text-slate-500">An Interactive Guide</p>
+            </div>
+            <nav id="sidebar-nav" class="p-2 mt-4 md:mt-0">
+                <a href="#fcfs" class="sidebar-link block p-3 rounded-lg text-slate-700 font-medium">First-Come, First-Served</a>
+                <a href="#sjf" class="sidebar-link block p-3 rounded-lg text-slate-700 font-medium">Shortest Job First (SJF)</a>
+                <a href="#srtf" class="sidebar-link block p-3 rounded-lg text-slate-700 font-medium">Shortest Remaining Time First</a>
+                <a href="#priority" class="sidebar-link block p-3 rounded-lg text-slate-700 font-medium">Priority (Non-Preemptive)</a>
+                <a href="#priority-p" class="sidebar-link block p-3 rounded-lg text-slate-700 font-medium">Priority (Preemptive)</a>
+                <a href="#rr" class="sidebar-link block p-3 rounded-lg text-slate-700 font-medium">Round Robin (RR)</a>
+            </nav>
+        </aside>
+        
+        <!-- Overlay for mobile -->
+        <div id="sidebar-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-30 hidden md:hidden"></div>
+
+        <!-- Main Content -->
+        <main class="flex-1 p-4 md:p-8">
+            <div id="content-container">
+                <!-- Content will be dynamically loaded here -->
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const contentContainer = document.getElementById('content-container');
+        const navLinks = document.querySelectorAll('#sidebar-nav a');
+        let chartInstance = null;
+        
+        const processColors = [
+            '#38bdf8', '#fbbf24', '#34d399', '#f87171', '#a78bfa',
+            '#22d3ee', '#facc15', '#4ade80', '#fb7185', '#c084fc'
+        ];
+        const processBgColors = [
+            'rgba(56, 189, 248, 0.6)', 'rgba(251, 191, 36, 0.6)', 'rgba(52, 211, 153, 0.6)', 'rgba(248, 113, 113, 0.6)', 'rgba(167, 139, 250, 0.6)',
+            'rgba(34, 211, 238, 0.6)', 'rgba(250, 204, 21, 0.6)', 'rgba(74, 222, 128, 0.6)', 'rgba(251, 113, 133, 0.6)', 'rgba(192, 132, 252, 0.6)'
+        ];
+
+        const data = {
+            fcfs: {
+                title: 'First-Come, First-Served (FCFS)',
+                description: `FCFS is the simplest scheduling algorithm. The process that requests the CPU first is allocated the CPU first. It's a non-preemptive algorithm implemented with a FIFO queue. While simple and starvation-free, its main drawback is the <strong>Convoy Effect</strong>, where short processes get stuck waiting behind long ones, leading to high average waiting times.`,
+                analysis: `The primary weakness of FCFS is its sensitivity to process arrival order. The Convoy Effect drastically degrades performance, making FCFS unsuitable for most modern time-sharing systems. It serves as a baseline to demonstrate the need for more intelligent algorithms.`,
+                problems: [
+                    { name: 'Problem 1: Staggered Arrival', processes: [{ id: 'P1', at: 0, bt: 8 }, { id: 'P2', at: 1, bt: 4 }, { id: 'P3', at: 2, bt: 9 }, { id: 'P4', at: 3, bt: 5 }] },
+                    { name: 'Problem 2: Convoy Effect', processes: [{ id: 'P1', at: 0, bt: 24 }, { id: 'P2', at: 0, bt: 3 }, { id: 'P3', at: 0, bt: 3 }] },
+                ]
+            },
+            sjf: {
+                title: 'Shortest Job First (SJF) - Non-Preemptive',
+                description: `SJF associates with each process the length of its next CPU burst. The CPU is assigned to the process with the smallest burst time. This version is non-preemptive: once a process starts, it runs to completion. SJF is provably optimal for minimizing average waiting time.`,
+                analysis: `SJF's optimality is its greatest strength, but this is offset by its major weakness: the inability to know future CPU burst times. This makes it impractical for short-term CPU scheduling in interactive systems. It also risks <strong>starvation</strong> for long processes if there's a steady supply of short ones.`,
+                problems: [
+                    { name: 'Problem 1: Staggered Arrival', processes: [{ id: 'P1', at: 0, bt: 6 }, { id: 'P2', at: 2, bt: 8 }, { id: 'P3', at: 4, bt: 3 }, { id: 'P4', at: 5, bt: 4 }] },
+                    { name: 'Problem 2: Simultaneous Arrival', processes: [{ id: 'P1', at: 0, bt: 6 }, { id: 'P2', at: 0, bt: 8 }, { id: 'P3', at: 0, bt: 7 }, { id: 'P4', at: 0, bt: 3 }] },
+                ]
+            },
+            srtf: {
+                title: 'Shortest Remaining Time First (SRTF)',
+                description: `SRTF is the preemptive version of SJF. The scheduler always chooses the process with the smallest amount of time remaining until completion. If a new process arrives with a CPU burst shorter than the remaining time of the current process, the current process is preempted.`,
+                analysis: `Like SJF, SRTF is optimal for average waiting time. Its preemptive nature improves responsiveness over non-preemptive SJF. However, it shares the same problem of needing to predict burst times and carries a higher overhead due to more frequent context switching. Starvation of long processes remains a concern.`,
+                problems: [
+                    { name: 'Problem 1: Basic Preemption', processes: [{ id: 'P1', at: 0, bt: 8 }, { id: 'P2', at: 1, bt: 4 }, { id: 'P3', at: 2, bt: 9 }, { id: 'P4', at: 3, bt: 5 }] },
+                    { name: 'Problem 2: Multiple Preemptions', processes: [{ id: 'P1', at: 0, bt: 6 }, { id: 'P2', at: 1, bt: 3 }, { id: 'P3', at: 2, bt: 7 }, { id: 'P4', at: 3, bt: 2 }] },
+                ]
+            },
+            priority: {
+                title: 'Priority Scheduling (Non-Preemptive)',
+                description: `A priority is associated with each process, and the CPU is allocated to the process with the highest priority (assuming a lower number means higher priority). In this non-preemptive version, a running process is not interrupted by the arrival of a higher-priority process. Ties are broken by FCFS.`,
+                analysis: `Priority scheduling allows for policy-based resource allocation. However, it can lead to <strong>starvation</strong> for low-priority processes. A common solution is <strong>aging</strong>, where a process's priority increases the longer it waits.`,
+                problems: [
+                    { name: 'Problem 1: Staggered Arrival', processes: [{ id: 'P1', at: 0, bt: 4, p: 2 }, { id: 'P2', at: 1, bt: 2, p: 1 }, { id: 'P3', at: 2, bt: 6, p: 3 }] },
+                    { name: 'Problem 2: Simultaneous Arrival', processes: [{ id: 'P1', at: 0, bt: 6, p: 2 }, { id: 'P2', at: 0, bt: 10, p: 1 }, { id: 'P3', at: 0, bt: 4, p: 3 }, { id: 'P4', at: 0, bt: 6, p: 2 }] },
+                ]
+            },
+            'priority-p': {
+                title: 'Priority Scheduling (Preemptive)',
+                description: `The preemptive version of priority scheduling. If a new process arrives with a priority higher than the currently running process, the current process is preempted and the new, higher-priority process is executed. This ensures the CPU is always running the highest-priority available job.`,
+                analysis: `This version is more responsive than its non-preemptive counterpart and is crucial for real-time systems where critical tasks must run immediately. However, it shares the same risk of starvation for low-priority processes and has higher context-switching overhead.`,
+                problems: [
+                    { name: 'Problem 1: Basic Preemption', processes: [{ id: 'P1', at: 0, bt: 9, p: 5 }, { id: 'P2', at: 1, bt: 4, p: 3 }, { id: 'P3', at: 2, bt: 5, p: 1 }, { id: 'P4', at: 3, bt: 7, p: 2 }, { id: 'P5', at: 4, bt: 3, p: 4 }] },
+                    { name: 'Problem 2: Another Scenario', processes: [{ id: 'P1', at: 0, bt: 8, p: 3 }, { id: 'P2', at: 1, bt: 2, p: 4 }, { id: 'P3', at: 2, bt: 6, p: 4 }, { id: 'P4', at: 3, bt: 4, p: 6 }, { id: 'P5', at: 5, bt: 2, p: 10 }, { id: 'P6', at: 6, bt: 5, p: 2 }] },
+                ]
+            },
+            rr: {
+                title: 'Round Robin (RR) Scheduling',
+                description: `Designed for time-sharing systems, RR is a preemptive algorithm. Each process gets a small unit of CPU time (a <strong>time quantum</strong>, q). If the process is still running after this quantum, it is preempted and added to the end of the ready queue. This provides excellent response time and prevents starvation.`,
+                analysis: `The performance of RR is critically dependent on the size of the time quantum 'q'. A large 'q' makes RR behave like FCFS. A small 'q' provides better response time but increases context-switching overhead. The key is to find a balance.`,
+                problems: [
+                    { name: 'Problem 1: q=2', processes: [{ id: 'P1', at: 0, bt: 10 }, { id: 'P2', at: 0, bt: 5 }, { id: 'P3', at: 0, bt: 8 }], quantum: 2 },
+                    { name: 'Problem 2: q=5', processes: [{ id: 'P1', at: 0, bt: 21 }, { id: 'P2', at: 0, bt: 3 }, { id: 'P3', at: 0, bt: 6 }, { id: 'P4', at: 0, bt: 2 }], quantum: 5 },
+                ]
+            }
+        };
+
+        function calculateFCFS(processes) {
+            const sortedProcesses = JSON.parse(JSON.stringify(processes)).sort((a, b) => a.at - b.at);
+            let currentTime = 0;
+            let gantt = [];
+            let trace = [];
+            const results = [];
+            let readyQueue = [];
+
+            trace.push({ time: 0, event: 'Start', queue: '[]' });
+
+            while (sortedProcesses.length > 0 || readyQueue.length > 0) {
+                while (sortedProcesses.length > 0 && sortedProcesses[0].at <= currentTime) {
+                    const p = sortedProcesses.shift();
+                    readyQueue.push(p);
+                    trace.push({ time: p.at, event: `${p.id} Arrives`, queue: `[${readyQueue.map(proc => proc.id).join(', ')}]` });
+                }
+
+                if (readyQueue.length > 0) {
+                    const currentProcess = readyQueue.shift();
+                    const startTime = Math.max(currentTime, currentProcess.at);
+                    const completionTime = startTime + currentProcess.bt;
+
+                    gantt.push({ process: currentProcess.id, start: startTime, end: completionTime });
+                    trace.push({ time: startTime, event: `${currentProcess.id} Starts`, queue: `[${readyQueue.map(proc => proc.id).join(', ')}]` });
+
+                    const turnaroundTime = completionTime - currentProcess.at;
+                    const waitingTime = turnaroundTime - currentProcess.bt;
+
+                    results.push({ ...currentProcess, ct: completionTime, tat: turnaroundTime, wt: waitingTime });
+                    currentTime = completionTime;
+                    trace.push({ time: currentTime, event: `${currentProcess.id} Completes`, queue: `[${readyQueue.map(proc => proc.id).join(', ')}]` });
+                } else if (sortedProcesses.length > 0) {
+                    currentTime = sortedProcesses[0].at;
+                }
+            }
+            return { gantt, results, trace };
+        }
+
+        function calculateSJF(processes) {
+            const processQueue = JSON.parse(JSON.stringify(processes));
+            let currentTime = 0;
+            let gantt = [];
+            let trace = [];
+            const results = [];
+            let completed = 0;
+
+            trace.push({ time: 0, event: 'Start', queue: '[]' });
+
+            while (completed < processes.length) {
+                let readyQueue = processQueue.filter(p => p.at <= currentTime && !p.isCompleted);
+                
+                if (readyQueue.length > 0) {
+                    readyQueue.sort((a, b) => a.bt - b.bt || a.at - b.at);
+                    const currentProcess = readyQueue[0];
+                    
+                    const startTime = currentTime;
+                    const completionTime = startTime + currentProcess.bt;
+                    
+                    gantt.push({ process: currentProcess.id, start: startTime, end: completionTime });
+                    const queueAtStart = processQueue.filter(p => p.at <= startTime && !p.isCompleted && p.id !== currentProcess.id);
+                    trace.push({ time: startTime, event: `${currentProcess.id} Starts`, queue: `[${queueAtStart.map(proc => `${proc.id}(${proc.bt})`).join(', ')}]` });
+
+                    const turnaroundTime = completionTime - currentProcess.at;
+                    const waitingTime = turnaroundTime - currentProcess.bt;
+                    
+                    const pIndex = processQueue.findIndex(p => p.id === currentProcess.id);
+                    processQueue[pIndex].isCompleted = true;
+                    completed++;
+                    results.push({ ...currentProcess, ct: completionTime, tat: turnaroundTime, wt: waitingTime });
+                    currentTime = completionTime;
+                    const queueAtEnd = processQueue.filter(p => p.at <= currentTime && !p.isCompleted);
+                    trace.push({ time: currentTime, event: `${currentProcess.id} Completes`, queue: `[${queueAtEnd.map(proc => `${proc.id}(${proc.bt})`).join(', ')}]` });
+
+                } else {
+                     const nextArrivalTime = Math.min(...processQueue.filter(p => !p.isCompleted).map(p => p.at));
+                    currentTime = nextArrivalTime;
+                }
+            }
+            return { gantt, results, trace };
+        }
+        
+        function calculateSRTF(processes) {
+            let currentTime = 0;
+            const processQueue = JSON.parse(JSON.stringify(processes.map(p => ({...p, rem_bt: p.bt, isCompleted: false}))));
+            let gantt = [];
+            let trace = [];
+            const results = [];
+            let completed = 0;
+            let lastProcessId = null;
+
+            trace.push({ time: 0, event: 'Start', queue: '[]' });
+
+            while (completed < processes.length) {
+                let readyQueue = processQueue.filter(p => p.at <= currentTime && !p.isCompleted);
+
+                if (readyQueue.length > 0) {
+                    readyQueue.sort((a, b) => a.rem_bt - b.rem_bt || a.at - b.at);
+                    const currentProcess = readyQueue[0];
+
+                    if (lastProcessId !== currentProcess.id) {
+                        if(lastProcessId && gantt.length > 0 && processQueue.find(p=>p.id===lastProcessId).rem_bt > 0) {
+                             trace.push({ time: currentTime, event: `${lastProcessId} Preempted`, queue: `[${readyQueue.map(p => `${p.id}(${p.rem_bt})`).join(', ')}]` });
+                        }
+                        gantt.push({ process: currentProcess.id, start: currentTime, end: currentTime + 1 });
+                        trace.push({ time: currentTime, event: `${currentProcess.id} Starts/Resumes`, queue: `[${readyQueue.filter(p=>p.id !== currentProcess.id).map(p => `${p.id}(${p.rem_bt})`).join(', ')}]` });
+                    } else {
+                        gantt[gantt.length - 1].end = currentTime + 1;
+                    }
+                    
+                    const pIndex = processQueue.findIndex(p => p.id === currentProcess.id);
+                    processQueue[pIndex].rem_bt--;
+                    currentTime++;
+
+                    if (processQueue[pIndex].rem_bt === 0) {
+                        const completionTime = currentTime;
+                        const turnaroundTime = completionTime - currentProcess.at;
+                        const waitingTime = turnaroundTime - currentProcess.bt;
+                        
+                        processQueue[pIndex].isCompleted = true;
+                        completed++;
+                        results.push({ ...currentProcess, ct: completionTime, tat: turnaroundTime, wt: waitingTime });
+                        
+                        const queueAtEnd = processQueue.filter(p => p.at <= currentTime && !p.isCompleted);
+                        trace.push({ time: currentTime, event: `${currentProcess.id} Completes`, queue: `[${queueAtEnd.map(p => `${p.id}(${p.rem_bt})`).join(', ')}]` });
+                    }
+                    lastProcessId = currentProcess.id;
+
+                } else {
+                    currentTime++;
+                }
+            }
+            
+            return { gantt, results, trace };
+        }
+
+        function calculatePriority(processes, preemptive) {
+            let currentTime = 0;
+            const processQueue = JSON.parse(JSON.stringify(processes.map(p => ({...p, rem_bt: p.bt, isCompleted: false}))));
+            let gantt = [];
+            let trace = [];
+            const results = [];
+            let completed = 0;
+            let lastProcessId = null;
+
+            trace.push({ time: 0, event: 'Start', queue: '[]' });
+
+            while (completed < processes.length) {
+                let readyQueue = processQueue.filter(p => p.at <= currentTime && !p.isCompleted);
+
+                if (readyQueue.length > 0) {
+                    readyQueue.sort((a, b) => a.p - b.p || a.at - b.at);
+                    const currentProcess = readyQueue[0];
+                    const pIndex = processQueue.findIndex(p => p.id === currentProcess.id);
+
+                    if (!preemptive) {
+                        const startTime = currentTime;
+                        const completionTime = startTime + currentProcess.bt;
+                        gantt.push({ process: currentProcess.id, start: startTime, end: completionTime });
+                        
+                        const queueAtStart = processQueue.filter(p => p.at <= startTime && !p.isCompleted && p.id !== currentProcess.id);
+                        trace.push({ time: startTime, event: `${currentProcess.id} Starts`, queue: `[${queueAtStart.map(p => `${p.id}(P:${p.p})`).join(', ')}]` });
+                        
+                        const turnaroundTime = completionTime - currentProcess.at;
+                        const waitingTime = turnaroundTime - currentProcess.bt;
+                        
+                        processQueue[pIndex].isCompleted = true;
+                        completed++;
+                        results.push({ ...currentProcess, ct: completionTime, tat: turnaroundTime, wt: waitingTime });
+                        
+                        currentTime = completionTime;
+                        const queueAtEnd = processQueue.filter(p => p.at <= currentTime && !p.isCompleted);
+                        trace.push({ time: currentTime, event: `${currentProcess.id} Completes`, queue: `[${queueAtEnd.map(p => `${p.id}(P:${p.p})`).join(', ')}]` });
+
+                    } else { // Preemptive
+                        if (lastProcessId !== currentProcess.id) {
+                             if(lastProcessId && gantt.length > 0 && processQueue.find(p=>p.id===lastProcessId).rem_bt > 0) {
+                                trace.push({ time: currentTime, event: `${lastProcessId} Preempted`, queue: `[${readyQueue.map(p => `${p.id}(P:${p.p})`).join(', ')}]` });
+                            }
+                            gantt.push({ process: currentProcess.id, start: currentTime, end: currentTime + 1 });
+                            trace.push({ time: currentTime, event: `${currentProcess.id} Starts/Resumes`, queue: `[${readyQueue.filter(p=>p.id !== currentProcess.id).map(p => `${p.id}(P:${p.p})`).join(', ')}]` });
+                        } else {
+                            gantt[gantt.length - 1].end = currentTime + 1;
+                        }
+                        
+                        processQueue[pIndex].rem_bt--;
+                        currentTime++;
+
+                        if (processQueue[pIndex].rem_bt === 0) {
+                            const completionTime = currentTime;
+                            const turnaroundTime = completionTime - currentProcess.at;
+                            const waitingTime = turnaroundTime - currentProcess.bt;
+
+                            processQueue[pIndex].isCompleted = true;
+                            completed++;
+                            results.push({ ...currentProcess, ct: completionTime, tat: turnaroundTime, wt: waitingTime });
+                            
+                            const queueAtEnd = processQueue.filter(p => p.at <= currentTime && !p.isCompleted);
+                            trace.push({ time: currentTime, event: `${currentProcess.id} Completes`, queue: `[${queueAtEnd.map(p => `${p.id}(P:${p.p})`).join(', ')}]` });
+                        }
+                        lastProcessId = currentProcess.id;
+                    }
+
+                } else {
+                    const nextArrivalTime = Math.min(...processQueue.filter(p => !p.isCompleted).map(p => p.at));
+                    currentTime = nextArrivalTime > currentTime ? nextArrivalTime : currentTime + 1;
+                }
+            }
+            return { gantt, results, trace };
+        }
+        
+        function calculateRR(processes, quantum) {
+            let currentTime = 0;
+            const processQueue = JSON.parse(JSON.stringify(processes.map(p => ({...p, rem_bt: p.bt, isCompleted: false}))));
+            let readyQueue = [];
+            let gantt = [];
+            let trace = [];
+            const results = [];
+            let completed = 0;
+
+            trace.push({ time: 0, event: 'Start', queue: '[]' });
+
+            while (completed < processes.length) {
+                // Add newly arrived processes to the ready queue
+                processQueue.filter(p => p.at <= currentTime && !p.isCompleted && !readyQueue.some(rq => rq.id === p.id))
+                    .sort((a,b) => a.at - b.at)
+                    .forEach(p => {
+                        readyQueue.push(p);
+                        trace.push({ time: p.at, event: `${p.id} Arrives`, queue: `[${readyQueue.map(proc => proc.id).join(', ')}]` });
+                    });
+
+                if (readyQueue.length > 0) {
+                    const currentProcess = readyQueue.shift();
+                    const pIndex = processQueue.findIndex(p => p.id === currentProcess.id);
+                    const runTime = Math.min(quantum, processQueue[pIndex].rem_bt);
+
+                    const startTime = currentTime;
+                    gantt.push({ process: currentProcess.id, start: startTime, end: startTime + runTime });
+                    trace.push({ time: startTime, event: `${currentProcess.id} Starts/Resumes`, queue: `[${readyQueue.map(proc => proc.id).join(', ')}]` });
+
+                    currentTime += runTime;
+                    processQueue[pIndex].rem_bt -= runTime;
+                    
+                    // Add any processes that arrived during execution
+                    processQueue.filter(p => p.at > startTime && p.at <= currentTime && !p.isCompleted && !readyQueue.some(rq => rq.id === p.id))
+                        .sort((a,b) => a.at - b.at)
+                        .forEach(p => {
+                            readyQueue.push(p);
+                            trace.push({ time: p.at, event: `${p.id} Arrives`, queue: `[${readyQueue.map(proc => proc.id).join(', ')}]` });
+                        });
+
+                    if (processQueue[pIndex].rem_bt > 0) {
+                        readyQueue.push(currentProcess);
+                        trace.push({ time: currentTime, event: `${currentProcess.id} Preempted (q=${quantum})`, queue: `[${readyQueue.map(proc => proc.id).join(', ')}]` });
+                    } else {
+                        const completionTime = currentTime;
+                        const turnaroundTime = completionTime - currentProcess.at;
+                        const waitingTime = turnaroundTime - currentProcess.bt;
+                        
+                        processQueue[pIndex].isCompleted = true;
+                        completed++;
+                        results.push({ ...currentProcess, ct: completionTime, tat: turnaroundTime, wt: waitingTime });
+                        trace.push({ time: currentTime, event: `${currentProcess.id} Completes`, queue: `[${readyQueue.map(proc => proc.id).join(', ')}]` });
+                    }
+                } else {
+                    const nextArrivalTime = Math.min(...processQueue.filter(p => !p.isCompleted).map(p => p.at));
+                    currentTime = nextArrivalTime;
+                }
+            }
+            return { gantt, results, trace };
+        }
+
+        function renderContent(algoKey) {
+            const algoData = data[algoKey];
+            if (!algoData) {
+                contentContainer.innerHTML = `<h2 class="text-2xl font-bold text-red-600">Algorithm not found</h2>`;
+                return;
+            }
+
+            const problemOptions = algoData.problems.map((p, index) => `<option value="${index}">${p.name}</option>`).join('');
+
+            contentContainer.innerHTML = `
+                <div class="space-y-8">
+                    <div>
+                        <h2 class="text-3xl font-bold text-slate-900">${algoData.title}</h2>
+                        <p class="mt-2 text-lg text-slate-600 max-w-4xl">${algoData.description}</p>
+                    </div>
+
+                    <div class="bg-white p-4 sm:p-6 rounded-xl border border-slate-200 shadow-sm">
+                        <h3 class="text-2xl font-semibold text-slate-800 mb-4">Interactive Simulator</h3>
+                        <div class="mb-4">
+                            <label for="problem-select" class="block text-sm font-medium text-slate-700 mb-1">Select a Problem:</label>
+                            <select id="problem-select" class="problem-select w-full md:w-1/2 bg-slate-50 border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-sky-500 focus:border-sky-500 block p-2.5">
+                                ${problemOptions}
+                            </select>
+                        </div>
+                        
+                        <div id="simulation-results" class="space-y-6">
+                            <!-- Results will be injected here -->
+                        </div>
+                    </div>
+
+                    <div class="bg-sky-50 p-4 sm:p-6 rounded-xl border border-sky-200">
+                        <h3 class="text-2xl font-semibold text-sky-900 mb-2">Analysis & Key Takeaways</h3>
+                        <p class="text-slate-700">${algoData.analysis}</p>
+                    </div>
+                </div>
+            `;
+
+            const problemSelect = document.getElementById('problem-select');
+            problemSelect.addEventListener('change', (e) => {
+                runSimulation(algoKey, e.target.value);
+            });
+
+            runSimulation(algoKey, 0); // Run simulation for the first problem by default
+        }
+
+        function runSimulation(algoKey, problemIndex) {
+            const problemData = data[algoKey].problems[problemIndex];
+            const processes = problemData.processes;
+            
+            let resultData;
+            switch(algoKey) {
+                case 'fcfs':
+                    resultData = calculateFCFS(processes);
+                    break;
+                case 'sjf':
+                    resultData = calculateSJF(processes);
+                    break;
+                case 'srtf':
+                    resultData = calculateSRTF(processes);
+                    break;
+                case 'priority':
+                    resultData = calculatePriority(processes, false);
+                    break;
+                case 'priority-p':
+                    resultData = calculatePriority(processes, true);
+                    break;
+                case 'rr':
+                    resultData = calculateRR(processes, problemData.quantum);
+                    break;
+            }
+            
+            renderSimulationResults(processes, resultData, algoKey, problemData.quantum);
+        }
+
+        function renderSimulationResults(processes, resultData, algoKey, quantum) {
+            const { gantt, results, trace } = resultData;
+            
+            const hasPriority = algoKey.includes('priority');
+            const processHeaders = `<th>Process ID</th><th>Arrival Time</th><th>Burst Time</th>${hasPriority ? '<th>Priority</th>' : ''}`;
+            const processRows = processes.map(p => `<tr><td class="font-mono">${p.id}</td><td>${p.at}</td><td>${p.bt}</td>${hasPriority ? `<td>${p.p}</td>` : ''}</tr>`).join('');
+
+            const resultsHeaders = `<th>Process ID</th><th>Completion</th><th>Turnaround</th><th>Waiting</th>`;
+            const sortedResults = results.sort((a,b) => a.id.localeCompare(b.id));
+            const resultsRows = sortedResults.map(r => `<tr><td class="font-mono">${r.id}</td><td>${r.ct}</td><td>${r.tat}</td><td>${r.wt}</td></tr>`).join('');
+            
+            const totalWT = results.reduce((sum, r) => sum + r.wt, 0);
+            const totalTAT = results.reduce((sum, r) => sum + r.tat, 0);
+            const avgWT = (totalWT / results.length).toFixed(2);
+            const avgTAT = (totalTAT / results.length).toFixed(2);
+
+            const traceRows = trace.map(t => `<tr><td>${t.time}</td><td>${t.event}</td><td class="font-mono">${t.queue}</td></tr>`).join('');
+
+            const simulationContainer = document.getElementById('simulation-results');
+            simulationContainer.innerHTML = `
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div>
+                        <h4 class="text-lg font-semibold text-slate-700 mb-2">Input Processes ${algoKey === 'rr' ? `(q=${quantum})` : ''}</h4>
+                        <div class="table-responsive"><table class="w-full text-sm text-left text-slate-500">
+                            <thead class="text-xs text-slate-700 uppercase bg-slate-100"><tr>${processHeaders}</tr></thead>
+                            <tbody class="bg-white">${processRows}</tbody>
+                        </table></div>
+                    </div>
+                     <div>
+                        <h4 class="text-lg font-semibold text-slate-700 mb-2">Performance Metrics</h4>
+                        <div class="table-responsive"><table class="w-full text-sm text-left text-slate-500">
+                            <thead class="text-xs text-slate-700 uppercase bg-slate-100"><tr>${resultsHeaders}</tr></thead>
+                            <tbody class="bg-white">${resultsRows}</tbody>
+                        </table></div>
+                         <div class="mt-2 text-right font-semibold">
+                            <p>Avg. Waiting Time: <span class="text-sky-600">${avgWT}</span></p>
+                            <p>Avg. Turnaround Time: <span class="text-sky-600">${avgTAT}</span></p>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h4 class="text-lg font-semibold text-slate-700 mb-2">Gantt Chart</h4>
+                    <div class="chart-container bg-slate-50 p-2 rounded-lg border border-slate-200">
+                        <canvas id="gantt-chart"></canvas>
+                    </div>
+                </div>
+
+                <div>
+                    <h4 class="text-lg font-semibold text-slate-700 mb-2">Execution Trace</h4>
+                    <div class="max-h-60 overflow-y-auto border border-slate-200 rounded-lg table-responsive">
+                        <table class="w-full text-sm text-left text-slate-500">
+                            <thead class="text-xs text-slate-700 uppercase bg-slate-100 sticky top-0"><tr><th>Time</th><th>Event</th><th>Ready Queue</th></tr></thead>
+                            <tbody class="bg-white">${traceRows}</tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+
+            renderGanttChart(gantt, processes);
+        }
+
+        function renderGanttChart(ganttData, processes) {
+            const ctx = document.getElementById('gantt-chart').getContext('2d');
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            const processMap = new Map(processes.map((p, i) => [p.id, i]));
+
+            const datasets = ganttData.map(item => {
+                const processIndex = processMap.get(item.process);
+                return {
+                    label: item.process,
+                    data: [{
+                        x: [item.start, item.end],
+                        y: item.process
+                    }],
+                    backgroundColor: processBgColors[processIndex % processColors.length],
+                    borderColor: processColors[processIndex % processColors.length],
+                    borderWidth: 1,
+                    barPercentage: 0.6,
+                    categoryPercentage: 0.7
+                }
+            });
+
+            const consolidatedDatasets = {};
+            datasets.forEach(ds => {
+                if (consolidatedDatasets[ds.label]) {
+                    consolidatedDatasets[ds.label].data.push(...ds.data);
+                } else {
+                    consolidatedDatasets[ds.label] = ds;
+                }
+            });
+
+            chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: [...new Set(ganttData.map(item => item.process))].sort((a,b) => a.localeCompare(b)),
+                    datasets: Object.values(consolidatedDatasets)
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.dataset.label}: [${context.raw.x[0]}, ${context.raw.x[1]}]`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            position: 'bottom',
+                            min: 0,
+                            title: {
+                                display: true,
+                                text: 'Time'
+                            },
+                            grid: {
+                                display: true,
+                                color: '#e2e8f0'
+                            },
+                            ticks: {
+                                stepSize: 2
+                            }
+                        },
+                        y: {
+                            grid: {
+                                display: false
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('sidebar-overlay');
+        const mobileMenuButton = document.getElementById('mobile-menu-button');
+
+        function closeMobileMenu() {
+            sidebar.classList.add('-translate-x-full');
+            overlay.classList.add('hidden');
+        }
+
+        function openMobileMenu() {
+            sidebar.classList.remove('-translate-x-full');
+            overlay.classList.remove('hidden');
+        }
+
+        function handleNavigation(e) {
+            e.preventDefault();
+            const link = e.target.closest('a');
+            if (!link) return;
+
+            const algoKey = link.getAttribute('href').substring(1);
+            
+            navLinks.forEach(l => l.classList.remove('active'));
+            link.classList.add('active');
+            
+            window.history.pushState({ algo: algoKey }, '', `#${algoKey}`);
+            renderContent(algoKey);
+
+            if (window.innerWidth < 768) {
+                closeMobileMenu();
+            }
+        }
+
+        function loadContentFromURL() {
+            const hash = window.location.hash.substring(1) || 'fcfs';
+            const activeLink = document.querySelector(`#sidebar-nav a[href="#${hash}"]`);
+            
+            if (activeLink) {
+                navLinks.forEach(l => l.classList.remove('active'));
+                activeLink.classList.add('active');
+                renderContent(hash);
+            } else {
+                document.querySelector('#sidebar-nav a[href="#fcfs"]').classList.add('active');
+                renderContent('fcfs');
+            }
+        }
+
+        mobileMenuButton.addEventListener('click', () => {
+            if (sidebar.classList.contains('-translate-x-full')) {
+                openMobileMenu();
+            } else {
+                closeMobileMenu();
+            }
+        });
+        
+        overlay.addEventListener('click', closeMobileMenu);
+
+        document.getElementById('sidebar-nav').addEventListener('click', handleNavigation);
+        window.addEventListener('popstate', (e) => {
+            if (e.state && e.state.algo) {
+                loadContentFromURL();
+            }
+        });
+
+        // Initial load
+        loadContentFromURL();
+    </script>
+</body>
+</html>
